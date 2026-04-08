@@ -16,7 +16,7 @@ import { ProductTile } from "@/types/planning"
 import { TIER_LABELS, CATEGORY_COLORS, calculateProductImpact, COMPETITOR_LAUNCHES, SEASONALITY_DATA } from "@/lib/planning-data"
 import { 
   Calendar, Target, TrendingUp, DollarSign, Users, Zap, 
-  AlertTriangle, Edit2, Trash2, Save, X, Package
+  AlertTriangle, Edit2, Trash2, Save, X, Package, Percent, BarChart3
 } from "lucide-react"
 
 const MONTHS = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"]
@@ -41,11 +41,15 @@ export function ProductDetailModal({
   const [isEditing, setIsEditing] = useState(false)
   const [editedProduct, setEditedProduct] = useState<ProductTile | null>(null)
   const [notes, setNotes] = useState("")
+  const [marginPercent, setMarginPercent] = useState<number | undefined>(undefined)
+  const [seasonalityOverride, setSeasonalityOverride] = useState<number | undefined>(undefined)
 
   useEffect(() => {
     if (product) {
       setEditedProduct({ ...product })
       setNotes(product.notes || "")
+      setMarginPercent(product.marginPercent)
+      setSeasonalityOverride(product.seasonalityOverride)
     }
   }, [product])
 
@@ -69,7 +73,7 @@ export function ProductDetailModal({
 
   const handleSave = () => {
     if (editedProduct) {
-      onSave({ ...editedProduct, notes })
+      onSave({ ...editedProduct, notes, marginPercent, seasonalityOverride })
       setIsEditing(false)
     }
   }
@@ -292,6 +296,55 @@ export function ProductDetailModal({
               </div>
             </div>
 
+            <div className="p-4 rounded-lg bg-violet-50 dark:bg-violet-950 border border-violet-200 dark:border-violet-800">
+              <div className="flex items-center gap-2 mb-2 text-violet-700 dark:text-violet-300">
+                <Percent className="h-4 w-4" />
+                <span className="text-sm font-medium">Business Controls</span>
+              </div>
+              <div className="space-y-3">
+                <div>
+                  <label className="text-xs text-slate-500 dark:text-slate-400 block mb-1">Gross Margin %</label>
+                  {isEditing ? (
+                    <Input
+                      type="number"
+                      value={marginPercent ?? ""}
+                      onChange={(e) => setMarginPercent(e.target.value ? Number(e.target.value) : undefined)}
+                      placeholder="e.g. 45"
+                      className="h-8"
+                      min={0}
+                      max={100}
+                    />
+                  ) : (
+                    <div className="text-lg font-bold text-violet-900 dark:text-violet-100">
+                      {marginPercent !== undefined ? `${marginPercent}%` : "—"}
+                    </div>
+                  )}
+                </div>
+                <div>
+                  <label className="text-xs text-slate-500 dark:text-slate-400 block mb-1">Seasonality Override</label>
+                  {isEditing ? (
+                    <Input
+                      type="number"
+                      value={seasonalityOverride ?? ""}
+                      onChange={(e) => setSeasonalityOverride(e.target.value ? Number(e.target.value) : undefined)}
+                      placeholder="e.g. 1.2"
+                      className="h-8"
+                      step="0.1"
+                      min={0.1}
+                      max={3.0}
+                    />
+                  ) : (
+                    <div className="text-lg font-bold text-violet-900 dark:text-violet-100">
+                      {seasonalityOverride !== undefined ? `${seasonalityOverride}x` : "Default"}
+                    </div>
+                  )}
+                  <p className="text-[10px] text-slate-400 mt-1">Override ML seasonality for new products without history</p>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <div className="grid grid-cols-2 gap-4">
             {nearbyCompetitors.length > 0 && (
               <div className="p-4 rounded-lg bg-amber-50 dark:bg-amber-950 border border-amber-200 dark:border-amber-800">
                 <div className="flex items-center gap-2 mb-2 text-amber-700 dark:text-amber-300">

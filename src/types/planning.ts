@@ -13,6 +13,8 @@ export interface ProductTile {
   launchYear?: number;
   launchDay?: number;
   notes?: string;
+  marginPercent?: number;
+  seasonalityOverride?: number;
 }
 
 export interface CompetitorLaunch {
@@ -23,6 +25,20 @@ export interface CompetitorLaunch {
   month: number;
   year: number;
   estimatedImpact: "High" | "Medium" | "Low";
+  dataSource?: string;
+  confidence?: string;
+}
+
+export interface HolidayDate {
+  id: number;
+  name: string;
+  month: number;
+  day: number;
+  year: number | null;
+  revenueImpactFactor: number;
+  category: string;
+  notes: string;
+  isRecurring: boolean;
 }
 
 export interface SeasonalityData {
@@ -31,6 +47,7 @@ export interface SeasonalityData {
   seasonalFactor: number;
   historicalRevenue: number;
   optimalForLaunch: boolean;
+  holidays?: HolidayDate[];
 }
 
 export interface MLForecast {
@@ -66,4 +83,17 @@ export interface TimelineMonth {
   competitorLaunches: CompetitorLaunch[];
   seasonalFactor: number;
   projectedRevenue: number;
+  holidays?: HolidayDate[];
+}
+
+export interface AuditLogEntry {
+  id: number;
+  action: string;
+  entityType: string;
+  entityId: string;
+  entityName: string;
+  details: Record<string, unknown>;
+  comment: string;
+  userName: string;
+  createdAt: string;
 }

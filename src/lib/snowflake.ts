@@ -1,5 +1,7 @@
 import snowflake from "snowflake-sdk";
 import fs from "fs";
+import path from "path";
+import crypto from "crypto";
 
 snowflake.configure({ logLevel: "ERROR" });
 
@@ -45,14 +47,35 @@ function getConfig(): snowflake.ConnectionOptions {
     };
   }
 
-  return {
-    account: process.env.SNOWFLAKE_ACCOUNT || "SFSENORTHAMERICA-DEMO_MMALVEIRA",
-    warehouse: process.env.SNOWFLAKE_WAREHOUSE || "GEN2_SMALL",
-    database: process.env.SNOWFLAKE_DATABASE || "LANDING_CO",
-    schema: process.env.SNOWFLAKE_SCHEMA || "FLATFILES",
-    username: process.env.SNOWFLAKE_USER || "MMALVEIRA",
-    password: process.env.SNOWFLAKE_PASSWORD || "",
-  };
+  const privateKeyPath = process.env.SNOWFLAKE_PRIVATE_KEY_PATH || path.join(process.env.HOME || "~", "rsa_key.p8");
+  try {
+    const privateKeyFile = fs.readFileSync(privateKeyPath, "utf8");
+    const privateKeyObj = crypto.createPrivateKey({
+      key: privateKeyFile,
+      format: "pem",
+    });
+    const privateKeyPem = privateKeyObj.export({ format: "pem", type: "pkcs8" }) as string;
+
+    return {
+      account: process.env.SNOWFLAKE_ACCOUNT || "SFSENORTHAMERICA-DEMO_MMALVEIRA",
+      warehouse: process.env.SNOWFLAKE_WAREHOUSE || "GEN2_SMALL",
+      database: process.env.SNOWFLAKE_DATABASE || "LANDING_CO",
+      schema: process.env.SNOWFLAKE_SCHEMA || "FLATFILES",
+      username: process.env.SNOWFLAKE_USER || "MMALVEIRA",
+      authenticator: "SNOWFLAKE_JWT",
+      privateKey: privateKeyPem,
+    };
+  } catch (err) {
+    console.error("Failed to read private key, falling back to password auth:", (err as Error).message);
+    return {
+      account: process.env.SNOWFLAKE_ACCOUNT || "SFSENORTHAMERICA-DEMO_MMALVEIRA",
+      warehouse: process.env.SNOWFLAKE_WAREHOUSE || "GEN2_SMALL",
+      database: process.env.SNOWFLAKE_DATABASE || "LANDING_CO",
+      schema: process.env.SNOWFLAKE_SCHEMA || "FLATFILES",
+      username: process.env.SNOWFLAKE_USER || "MMALVEIRA",
+      password: process.env.SNOWFLAKE_PASSWORD || "",
+    };
+  }
 }
 
 async function getConnection(): Promise<snowflake.Connection> {
@@ -67,7 +90,8 @@ async function getConnection(): Promise<snowflake.Connection> {
     connection.destroy(() => {});
   }
 
-  console.log(token ? "Connecting with OAuth token" : "Connecting with username/password");
+  const authMethod = token ? "OAuth token" : "key-pair";
+  console.log(`Connecting with ${authMethod}`);
   const conn = snowflake.createConnection(getConfig());
   
   const connectPromise = withTimeout(

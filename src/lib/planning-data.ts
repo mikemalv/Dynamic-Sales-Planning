@@ -1,4 +1,4 @@
-import { ProductTile, CompetitorLaunch, SeasonalityData, MLForecast } from "@/types/planning";
+import { ProductTile, CompetitorLaunch, SeasonalityData, MLForecast, HolidayDate } from "@/types/planning";
 
 export const CATEGORY_COLORS: Record<string, string> = {
   Driver: "#3b82f6",
@@ -146,6 +146,42 @@ export const DEFAULT_PRODUCT_TILES: ProductTile[] = [
     hasNewTech: false,
     color: CATEGORY_COLORS.Putter,
   },
+  {
+    id: "mavrik-2026-driver",
+    name: "Mavrik 2026 Driver",
+    category: "Driver",
+    tier: 1,
+    playerType: "Game Improvement",
+    marketSize: 80000000,
+    projectedRevenue: { low: 40000000, mid: 50000000, high: 60000000 },
+    projectedShare: { low: 10, mid: 15, high: 20 },
+    hasNewTech: true,
+    color: CATEGORY_COLORS.Driver,
+  },
+  {
+    id: "chrome-soft-x-ball",
+    name: "Chrome Soft X",
+    category: "Iron",
+    tier: 1,
+    playerType: "Better Player",
+    marketSize: 90000000,
+    projectedRevenue: { low: 30000000, mid: 40000000, high: 50000000 },
+    projectedShare: { low: 14, mid: 20, high: 26 },
+    hasNewTech: false,
+    color: CATEGORY_COLORS.Iron,
+  },
+  {
+    id: "jaws-full-toe-wedge",
+    name: "Jaws Full Toe Wedge",
+    category: "Wedge",
+    tier: 2,
+    playerType: "Better Player",
+    marketSize: 40000000,
+    projectedRevenue: { low: 12000000, mid: 18000000, high: 24000000 },
+    projectedShare: { low: 8, mid: 14, high: 20 },
+    hasNewTech: false,
+    color: CATEGORY_COLORS.Wedge,
+  },
 ];
 
 export const COMPETITOR_LAUNCHES: CompetitorLaunch[] = [
@@ -180,7 +216,7 @@ export const SEASONALITY_DATA: SeasonalityData[] = [
   { month: 3, monthName: "March", seasonalFactor: 1.20, historicalRevenue: 38000000, optimalForLaunch: true },
   { month: 4, monthName: "April", seasonalFactor: 1.15, historicalRevenue: 35000000, optimalForLaunch: false },
   { month: 5, monthName: "May", seasonalFactor: 1.10, historicalRevenue: 32000000, optimalForLaunch: false },
-  { month: 6, monthName: "June", seasonalFactor: 0.95, historicalRevenue: 28000000, optimalForLaunch: false },
+  { month: 6, monthName: "June", seasonalFactor: 1.15, historicalRevenue: 36000000, optimalForLaunch: true },
   { month: 7, monthName: "July", seasonalFactor: 0.85, historicalRevenue: 25000000, optimalForLaunch: false },
   { month: 8, monthName: "August", seasonalFactor: 0.80, historicalRevenue: 24000000, optimalForLaunch: false },
   { month: 9, monthName: "September", seasonalFactor: 0.90, historicalRevenue: 27000000, optimalForLaunch: false },
@@ -188,6 +224,11 @@ export const SEASONALITY_DATA: SeasonalityData[] = [
   { month: 11, monthName: "November", seasonalFactor: 1.05, historicalRevenue: 33000000, optimalForLaunch: false },
   { month: 12, monthName: "December", seasonalFactor: 1.15, historicalRevenue: 36000000, optimalForLaunch: false },
 ];
+
+function seededRandom(seed: number): number {
+  const x = Math.sin(seed * 9301 + 49297) * 49297;
+  return x - Math.floor(x);
+}
 
 export function generateMLForecasts(startYear: number, months: number): MLForecast[] {
   const forecasts: MLForecast[] = [];
@@ -198,17 +239,20 @@ export function generateMLForecasts(startYear: number, months: number): MLForeca
     const year = startYear + Math.floor(i / 12);
     const seasonality = SEASONALITY_DATA.find(s => s.month === month)?.seasonalFactor || 1;
     const yearGrowth = 1 + (year - startYear) * 0.05;
-    const randomVariation = 0.9 + Math.random() * 0.2;
+    const deterministicVariation = 0.92 + seededRandom(year * 100 + month) * 0.16;
     
-    const predictedRevenue = baseRevenue * seasonality * yearGrowth * randomVariation;
-    const confidence = 0.75 + (Math.random() * 0.2) - (i * 0.005);
+    const predictedRevenue = baseRevenue * seasonality * yearGrowth * deterministicVariation;
+    const confidence = Math.max(0.5, Math.min(0.95, 0.85 - (i * 0.005)));
     
     const prevMonth = i > 0 ? forecasts[i - 1]?.predictedRevenue : baseRevenue;
     const trend = predictedRevenue > prevMonth * 1.02 ? "up" : predictedRevenue < prevMonth * 0.98 ? "down" : "stable";
     
     const factors: string[] = [];
     if (month >= 1 && month <= 3) factors.push("Peak golf season start");
-    if (month >= 6 && month <= 8) factors.push("Summer slowdown");
+    if (month === 6) factors.push("Father's Day sales boost (+85%)");
+    if (month >= 7 && month <= 8) factors.push("Summer slowdown");
+    if (month === 11) factors.push("Black Friday volume boost");
+    if (month === 12) factors.push("Holiday gifting season");
     if (year > startYear) factors.push("Year-over-year growth");
     if (seasonality > 1.1) factors.push("Strong seasonal demand");
     
@@ -216,13 +260,28 @@ export function generateMLForecasts(startYear: number, months: number): MLForeca
       month,
       year,
       predictedRevenue: Math.round(predictedRevenue),
-      confidence: Math.max(0.5, Math.min(0.95, confidence)),
+      confidence,
       trend,
       factors,
     });
   }
   
   return forecasts;
+}
+
+export function getSeasonalityWithHolidays(holidays: HolidayDate[]): SeasonalityData[] {
+  return SEASONALITY_DATA.map(s => {
+    const monthHolidays = holidays.filter(h => h.month === s.month);
+    let adjustedFactor = s.seasonalFactor;
+    monthHolidays.forEach(h => {
+      adjustedFactor = Math.max(adjustedFactor, s.seasonalFactor * (h.revenueImpactFactor * 0.7 + 0.3));
+    });
+    return {
+      ...s,
+      seasonalFactor: Math.round(adjustedFactor * 100) / 100,
+      holidays: monthHolidays,
+    };
+  });
 }
 
 export function calculateProductImpact(
@@ -256,7 +315,7 @@ export function calculateProductImpact(
   const marketShareImpact = tile.projectedShare.mid * competitorImpact;
   
   if (seasonality < 0.9) {
-    alerts.push("Sub-optimal launch window - consider Q1 for better results");
+    alerts.push("Sub-optimal launch window - consider Q1 or June (Father's Day) for better results");
   }
   
   return { adjustedRevenue, marketShareImpact, alerts };

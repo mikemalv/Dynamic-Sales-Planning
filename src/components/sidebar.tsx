@@ -1,16 +1,24 @@
 "use client"
 
-import { useState } from "react"
-import { ChevronDown, ChevronRight, RefreshCw, X, Check } from "lucide-react"
+import { useState, useEffect } from "react"
+import { ChevronDown, ChevronRight, RefreshCw, X, Check, Plus, Copy, Trash2 } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
 import { cn } from "@/lib/utils"
+import { DEFAULT_PRODUCT_TILES, CATEGORY_COLORS, TIER_LABELS } from "@/lib/planning-data"
 
-const SCENARIOS = [
+interface SavedScenario {
+  id: string
+  name: string
+  description?: string
+  totalRevenue?: number
+  scheduledCount?: number
+  version?: number
+  updatedAt?: string
+}
+
+const DEFAULT_SCENARIOS: SavedScenario[] = [
   { id: "base", name: "Base Plan", description: "Current default strategy" },
-  { id: "aggressive", name: "Aggressive Growth", description: "Earlier launches, higher risk" },
-  { id: "conservative", name: "Conservative", description: "Later launches, lower risk" },
-  { id: "competitive", name: "Competitive Response", description: "Reactive to competitors" },
 ]
 
 const REGIONS = [
@@ -22,62 +30,17 @@ const REGIONS = [
   { id: "row", name: "Rest of World" },
 ]
 
-const PRODUCT_CATEGORIES = [
-  {
-    name: "Drivers",
-    products: [
-      { id: "paradym-ai", name: "Paradym Ai Smoke", tier: "Tier 1" },
-      { id: "mavrik-2026", name: "Mavrik 2026", tier: "Tier 1" },
-      { id: "rogue-st-max", name: "Rogue ST Max", tier: "Tier 2" },
-    ]
-  },
-  {
-    name: "Irons",
-    products: [
-      { id: "apex-pro", name: "Apex Pro 2026", tier: "Tier 1" },
-      { id: "paradym-irons", name: "Paradym Irons", tier: "Tier 2" },
-      { id: "big-bertha", name: "Big Bertha Irons", tier: "Tier 3" },
-    ]
-  },
-  {
-    name: "Wedges",
-    products: [
-      { id: "jaws-raw", name: "Jaws Raw", tier: "Tier 1" },
-      { id: "jaws-full-toe", name: "Jaws Full Toe", tier: "Tier 2" },
-      { id: "mack-daddy", name: "Mack Daddy CB", tier: "Tier 3" },
-    ]
-  },
-  {
-    name: "Putters",
-    products: [
-      { id: "odyssey-ai", name: "Odyssey Ai-One", tier: "Tier 1" },
-      { id: "triple-track", name: "Triple Track Ten", tier: "Tier 2" },
-      { id: "white-hot", name: "White Hot OG", tier: "Tier 2" },
-    ]
-  },
-  {
-    name: "Golf Balls",
-    products: [
-      { id: "chrome-soft", name: "Chrome Soft X", tier: "Tier 1" },
-      { id: "chrome-tour", name: "Chrome Tour", tier: "Tier 1" },
-      { id: "supersoft", name: "Supersoft", tier: "Tier 3" },
-    ]
-  },
-  {
-    name: "Fairway Woods",
-    products: [
-      { id: "paradym-fw", name: "Paradym Fairway", tier: "Tier 1" },
-      { id: "rogue-fw", name: "Rogue ST Fairway", tier: "Tier 2" },
-    ]
-  },
-  {
-    name: "Hybrids",
-    products: [
-      { id: "paradym-hybrid", name: "Paradym Hybrid", tier: "Tier 1" },
-      { id: "apex-hybrid", name: "Apex Hybrid", tier: "Tier 2" },
-    ]
-  },
-]
+const PRODUCT_CATEGORIES = Array.from(
+  new Set(DEFAULT_PRODUCT_TILES.map(t => t.category))
+).map(category => ({
+  name: category === "Iron" ? "Irons" : category === "Driver" ? "Drivers" : category === "Wedge" ? "Wedges" : category === "Putter" ? "Putters" : category === "Hybrid" ? "Hybrids" : category === "Fairway" ? "Fairway Woods" : category,
+  categoryKey: category,
+  products: DEFAULT_PRODUCT_TILES.filter(t => t.category === category).map(t => ({
+    id: t.id,
+    name: t.name,
+    tier: `Tier ${t.tier}`,
+  })),
+}))
 
 interface SidebarProps {
   isOpen: boolean
@@ -89,6 +52,9 @@ interface SidebarProps {
   selectedProducts: string[]
   onProductsChange: (products: string[]) => void
   onRefresh: () => void
+  onCreateScenario?: (name: string, copyFrom?: string) => void
+  onDeleteScenario?: (id: string) => void
+  savedScenarios?: SavedScenario[]
 }
 
 export function Sidebar({
@@ -101,8 +67,15 @@ export function Sidebar({
   selectedProducts,
   onProductsChange,
   onRefresh,
+  onCreateScenario,
+  onDeleteScenario,
+  savedScenarios,
 }: SidebarProps) {
   const [expandedCategories, setExpandedCategories] = useState<string[]>(["Drivers"])
+  const [showNewScenario, setShowNewScenario] = useState(false)
+  const [newScenarioName, setNewScenarioName] = useState("")
+
+  const scenarios = savedScenarios && savedScenarios.length > 0 ? savedScenarios : DEFAULT_SCENARIOS
 
   const toggleCategory = (category: string) => {
     setExpandedCategories(prev =>
@@ -120,8 +93,31 @@ export function Sidebar({
     )
   }
 
+  const selectAllInCategory = (categoryKey: string) => {
+    const categoryProductIds = DEFAULT_PRODUCT_TILES.filter(t => t.category === categoryKey).map(t => t.id)
+    const allSelected = categoryProductIds.every(id => selectedProducts.includes(id))
+    if (allSelected) {
+      onProductsChange(selectedProducts.filter(p => !categoryProductIds.includes(p)))
+    } else {
+      const newSelection = [...selectedProducts]
+      categoryProductIds.forEach(id => {
+        if (!newSelection.includes(id)) newSelection.push(id)
+      })
+      onProductsChange(newSelection)
+    }
+  }
+
   const clearSelection = () => {
     onProductsChange([])
+  }
+
+  const handleCreateScenario = () => {
+    if (newScenarioName.trim() && onCreateScenario) {
+      const id = newScenarioName.trim().toLowerCase().replace(/\s+/g, "-").replace(/[^a-z0-9-]/g, "")
+      onCreateScenario(newScenarioName.trim(), selectedScenario)
+      setNewScenarioName("")
+      setShowNewScenario(false)
+    }
   }
 
   if (!isOpen) return null
@@ -147,20 +143,91 @@ export function Sidebar({
             <h3 className="text-sm font-semibold text-slate-700 dark:text-slate-300 mb-3 flex items-center gap-2">
               Scenario Management
             </h3>
-            <select
-              value={selectedScenario}
-              onChange={(e) => onScenarioChange(e.target.value)}
-              className="w-full px-3 py-2 rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-sm text-slate-900 dark:text-slate-100"
-            >
-              {SCENARIOS.map(scenario => (
-                <option key={scenario.id} value={scenario.id}>
-                  {scenario.name}
-                </option>
+            <div className="space-y-2">
+              {scenarios.map(scenario => (
+                <div
+                  key={scenario.id}
+                  onClick={() => onScenarioChange(scenario.id)}
+                  className={cn(
+                    "p-3 rounded-lg border cursor-pointer transition-all hover:shadow-md",
+                    selectedScenario === scenario.id
+                      ? "border-indigo-500 bg-indigo-50 dark:bg-indigo-950 ring-2 ring-indigo-500/20"
+                      : "border-slate-200 dark:border-slate-700 hover:border-indigo-300"
+                  )}
+                >
+                  <div className="flex items-center justify-between">
+                    <span className="text-sm font-medium text-slate-900 dark:text-slate-100">{scenario.name}</span>
+                    <div className="flex items-center gap-1">
+                      {scenario.version && (
+                        <Badge variant="outline" className="text-[10px]">v{scenario.version}</Badge>
+                      )}
+                      {selectedScenario === scenario.id && (
+                        <div className="w-2 h-2 rounded-full bg-indigo-500" />
+                      )}
+                    </div>
+                  </div>
+                  {scenario.totalRevenue !== undefined && (
+                    <div className="flex items-center gap-3 mt-1 text-xs text-slate-500 dark:text-slate-400">
+                      <span>${(scenario.totalRevenue / 1000000).toFixed(1)}M</span>
+                      <span>{scenario.scheduledCount} launches</span>
+                    </div>
+                  )}
+                  {scenario.description && (
+                    <p className="text-xs text-slate-500 dark:text-slate-400 mt-1">{scenario.description}</p>
+                  )}
+                  {scenario.id !== "base" && onDeleteScenario && (
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      className="mt-1 h-6 text-xs text-red-500 hover:text-red-700 px-1"
+                      onClick={(e) => {
+                        e.stopPropagation()
+                        if (confirm(`Delete scenario "${scenario.name}"?`)) {
+                          onDeleteScenario(scenario.id)
+                        }
+                      }}
+                    >
+                      <Trash2 className="h-3 w-3 mr-1" /> Delete
+                    </Button>
+                  )}
+                </div>
               ))}
-            </select>
-            <p className="mt-1 text-xs text-slate-500 dark:text-slate-400">
-              {SCENARIOS.find(s => s.id === selectedScenario)?.description}
-            </p>
+            </div>
+
+            {showNewScenario ? (
+              <div className="mt-3 p-3 border border-indigo-200 dark:border-indigo-800 rounded-lg bg-indigo-50 dark:bg-indigo-950">
+                <input
+                  type="text"
+                  value={newScenarioName}
+                  onChange={(e) => setNewScenarioName(e.target.value)}
+                  placeholder="Scenario name..."
+                  className="w-full px-2 py-1.5 text-sm border border-indigo-300 dark:border-indigo-700 rounded bg-white dark:bg-slate-800 mb-2"
+                  autoFocus
+                  onKeyDown={(e) => e.key === "Enter" && handleCreateScenario()}
+                />
+                <div className="text-xs text-indigo-600 dark:text-indigo-400 mb-2">
+                  <Copy className="h-3 w-3 inline mr-1" />
+                  Copies current plan from &quot;{scenarios.find(s => s.id === selectedScenario)?.name || selectedScenario}&quot;
+                </div>
+                <div className="flex gap-2">
+                  <Button size="sm" className="flex-1 h-7 text-xs" onClick={handleCreateScenario} disabled={!newScenarioName.trim()}>
+                    Create
+                  </Button>
+                  <Button size="sm" variant="outline" className="h-7 text-xs" onClick={() => setShowNewScenario(false)}>
+                    Cancel
+                  </Button>
+                </div>
+              </div>
+            ) : (
+              <Button
+                variant="outline"
+                size="sm"
+                className="mt-3 w-full gap-2 border-dashed border-indigo-300 dark:border-indigo-700 text-indigo-600 dark:text-indigo-400"
+                onClick={() => setShowNewScenario(true)}
+              >
+                <Plus className="h-3 w-3" /> New Scenario
+              </Button>
+            )}
           </div>
 
           <div className="border-t border-slate-200 dark:border-slate-700 pt-4">
@@ -185,7 +252,7 @@ export function Sidebar({
               Product Selection
             </h3>
             <p className="text-xs text-slate-500 dark:text-slate-400 mb-3">
-              Select products to view in timeline
+              Filter products shown in timeline and charts
             </p>
 
             <div className="space-y-1">
@@ -196,13 +263,26 @@ export function Sidebar({
                     className="w-full px-3 py-2 flex items-center justify-between bg-slate-50 dark:bg-slate-800 hover:bg-slate-100 dark:hover:bg-slate-700 transition-colors"
                   >
                     <span className="text-sm font-medium text-slate-700 dark:text-slate-300 flex items-center gap-2">
+                      <span
+                        className="w-3 h-3 rounded-full"
+                        style={{ backgroundColor: CATEGORY_COLORS[category.categoryKey] }}
+                      />
                       {category.name}
+                      <Badge variant="outline" className="text-[10px]">{category.products.length}</Badge>
                     </span>
-                    {expandedCategories.includes(category.name) ? (
-                      <ChevronDown className="h-4 w-4 text-slate-500" />
-                    ) : (
-                      <ChevronRight className="h-4 w-4 text-slate-500" />
-                    )}
+                    <div className="flex items-center gap-1">
+                      <button
+                        onClick={(e) => { e.stopPropagation(); selectAllInCategory(category.categoryKey); }}
+                        className="text-[10px] text-indigo-600 dark:text-indigo-400 hover:underline px-1"
+                      >
+                        Toggle All
+                      </button>
+                      {expandedCategories.includes(category.name) ? (
+                        <ChevronDown className="h-4 w-4 text-slate-500" />
+                      ) : (
+                        <ChevronRight className="h-4 w-4 text-slate-500" />
+                      )}
+                    </div>
                   </button>
                   {expandedCategories.includes(category.name) && (
                     <div className="p-2 space-y-1 bg-white dark:bg-slate-900">
